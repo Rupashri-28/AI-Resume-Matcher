@@ -1,19 +1,10 @@
 import streamlit as st
-import io
 import plotly.express as px
 import plotly.graph_objects as go
 import os
-from fpdf import FPDF
-from PIL import Image
+import shutil
 from utils.parser import extract_text
 from utils.matcher import match_resume_to_jd
-import os
-import shutil
-
-try:
-    import kaleido  # Just to check if it's available
-except ImportError:
-    st.warning("⚠️ 'kaleido' is not installed. PDF charts won't be generated. Run `pip install kaleido`.")
 
 # 🔁 Cleanup old chart files (if any)
 charts_dir = "charts"
@@ -57,71 +48,6 @@ if upload_mode == "Single Resume":
 else:
     uploaded_files = st.file_uploader("Upload Multiple Resumes", type=["pdf", "docx"], accept_multiple_files=True)
 
-def generate_pdf_report(res):
-    try:
-        # Save pie chart
-        pie_fig = go.Figure(data=[go.Pie(
-            labels=["Semantic Score", "Keyword Score"],
-            values=[
-                res['semantic_score'] * 0.8 * 100,
-                res['keyword_score'] * 0.2 * 100
-            ],
-            hole=0.4,
-            marker=dict(colors=["#00cc96", "#ffa15a"]),
-            textinfo='label+percent'
-        )])
-        pie_path = os.path.join("charts", f"{res['name']}_pie.png")
-        pie_fig.write_image(pie_path)
-
-        # Save bar chart
-        bar_fig = px.bar(
-            {"Labels": ["Semantic", "Keyword"], "Scores": [
-                res['semantic_score'] * 100,
-                res['keyword_score'] * 100]},
-            x="Labels",
-            y="Scores",
-            color="Labels",
-            color_discrete_sequence=["#00cc96", "#ffa15a"],
-            title="Score Breakdown"
-        )
-        bar_path = os.path.join("charts", f"{res['name']}_bar.png")
-        bar_fig.write_image(bar_path)
-
-        # Generate PDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", "B", 14)
-        pdf.cell(0, 10, f"Resume Match Report - {res['name']}", ln=True)
-
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, f"""
-        Match Score: {res['score']:.2f}%
-        Semantic Score: {res['semantic_score'] * 100:.2f}%
-        Keyword Score: {res['keyword_score'] * 100:.2f}%
-        Matched Keywords: {', '.join(res['common']) if res['common'] else 'None'}
-        """.strip())
-
-        if os.path.exists(pie_path):
-            pdf.image(pie_path, w=150)
-        if os.path.exists(bar_path):
-            pdf.image(bar_path, w=150)
-
-        pdf_buffer = io.BytesIO()
-        pdf.output(pdf_buffer)
-        pdf_buffer.seek(0)
-
-        # Clean up images
-        os.remove(pie_path)
-        os.remove(bar_path)
-
-        print("PDF generated successfully!")
-        return pdf_buffer
-
-    except Exception as e:
-        print(f"Error generating PDF: {e}")
-        st.warning(f"⚠️ PDF report could not be generated for {res['name']}.")
-        return None
-
 # --- Match Button ---
 if st.button("🔍 Match Now"):
     if not job_description or not uploaded_files:
@@ -158,25 +84,13 @@ if st.button("🔍 Match Now"):
             # Pie Chart
             fig = go.Figure(data=[go.Pie(
                 labels=["Semantic Score", "Keyword Score"],
-                values=[
-                    res['semantic_score'] * 0.8 * 100,
-                    res['keyword_score'] * 0.2 * 100
-                ],
+                values=[res['semantic_score'] * 0.8 * 100, res['keyword_score'] * 0.2 * 100],
                 hole=0.4,
                 marker=dict(colors=["#00cc96", "#ffa15a"]),
                 textinfo='label+percent'
             )])
             fig.update_layout(title_text="Score Contribution Breakdown", showlegend=True)
             st.plotly_chart(fig, use_container_width=True)
-
-            pdf_bytes = generate_pdf_report(res)
-            if pdf_bytes:
-                st.download_button(
-                    label="📄 Download Full PDF Report",
-                    data=pdf_bytes,
-                    file_name=f"{res['name'].replace('.pdf', '')}_match_report.pdf",
-                    mime="application/pdf"
-                )
 
             # 🔑 Common Keywords
             if res['common']:
